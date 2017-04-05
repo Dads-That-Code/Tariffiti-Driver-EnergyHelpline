@@ -15,9 +15,16 @@ var testThat = {
 		console.log("messages: " + messages);
 		console.log("currentCount:" + currentCount);
 		return (messages >= (currentCount + 1));
+	},
+
+	allTariffsHasBeenRetrieved : function() {
+		console.log("messages: " + messages);
+		console.log("currentCount:" + currentCount);
+		return (messages >= (currentCount + 1));
 	}
 };
 
 
 exports.theSpinnerHasStopped = testThat.theSpinnerHasStopped;
 exports.theCurrentTariffHasBeenRetrieved = testThat.theCurrentTariffHasBeenRetrieved;
+exports.allTariffsHasBeenRetrieved = testThat.allTariffsHasBeenRetrieved;

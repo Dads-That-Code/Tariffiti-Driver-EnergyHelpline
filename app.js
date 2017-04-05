@@ -1,28 +1,40 @@
-//"c:\Program Files (x86)\phantomjs-2.1.1-windows\bin\phantomjs.exe" --local-to-remote-url-access=yes  --web-security=false --ignore-ssl-errors=true app.js --ssl-protocol=any  postcode="B79 9HL" fuelMix="gasAndElec"  sameSupplier="true"
+//"c:\Program Files (x86)\phantomjs-2.1.1-windows\bin\phantomjs.exe" --local-to-remote-url-access=yes  --web-security=false --ignore-ssl-errors=true app.js --ssl-protocol=any  postcode="B79 9HL" fuelMix="gasAndElec" sameSupplier="true" isE7="true" paymentMethod="MDD" tariffService="http://localhost:8090/api/enqueue/energyhelpline/tariff" futureOnly="true"
 
 "use strict";
 
-var args 	 = require('./args'),
-    page 	 = require('webpage').create(), 
-    wait 	 = require('./wait'), 
-	then	 = require('./then.js'), 
-	testThat = require('./testthat.js'), 
-	fs 		 = require('fs'), 
-	service  = require('webpage').create();
+var args 	 	= require('./args'),
+    page 	 	= require('webpage').create(), 
+    wait 	 	= require('./wait'), 
+	then	 	= require('./then.js'), 
+	testThat 	= require('./testthat.js'), 
+	fs 		 	= require('fs'), 
+	service  	= require('webpage').create(),
+	system 		= require('system'), 
+	debug		= require('./debugger.js');
 
 var params = {
-	postcode 	 : args.get("postcode"), 
-	fuelMix 	 : args.get("fuelmix"),
-	sameSupplier : args.get("sameSupplier") == "true", 
-	outputPath   : args.get("outputPath")
+	postcode 	 	: args.get("postcode"), 
+	fuelMix 	 	: args.get("fuelmix"),
+	sameSupplier 	: args.get("sameSupplier") == "true",
+	isE7		 	: args.get("isE7") == "true", 
+	paymentMethod	: args.get("paymentMethod"), 
+	tariffService   : args.get("tariffService"), 
+	futureOnly		: args.get("futureOnly") == "true"
 };
  
 console.log("postcode: " + params.postcode);
 console.log("fuelMix: " + params.fuelMix);
 console.log("sameSupplier: " + params.sameSupplier);
+console.log("isE7: " + params.isE7);
+console.log("paymentMethod: " + params.paymentMethod);
+console.log("tariffService: " + params.tariffService);
+console.log("futureOnly: " + params.futureOnly)
 
 var currentCount = null;
 var messages = null;
+
+// Emit verbose debug information about the service page
+debug.emit(service);
 
 page.onConsoleMessage = function(msg) {
     console.log(msg);
@@ -33,36 +45,28 @@ page.onResourceRequested = function(requestData, networkRequest) {
 		var match = requestData.url.match(/tariffSelection/g);
 		if (match != null) {
 
-			var tariffAndSupplier = page.evaluate(function(p) {
-				return { 
-					supplier: $('#elecSupplier option:selected').text(), 
-					tariff	: $('#elecSupplierTariff option:selected').text()
-				};
-			}, 
-			params);
+			console.log("Requesting resource: " + requestData.url);
 
-			if (tariffAndSupplier.supplier && tariffAndSupplier.tariff) {
+			var settings = {
+				operation: "POST",
+				encoding: "utf8",
+				headers: {
+					"Content-Type": "application/json"
+				},
+				data: JSON.stringify({
+					url 	: requestData.url, 
+					seenOn 	: new Date()
+				})
+			};
 
-				var settings = {
-					operation: "POST",
-					encoding: "utf8",
-					headers: {
-						"Content-Type": "application/json"
-					},
-					data: JSON.stringify({
-						supplier: tariffAndSupplier.supplier, 
-						tariff: tariffAndSupplier.tariff, 
-						url : requestData.url
-					})
-				};
+			console.log(settings);
 
-				service.open('http://localhost:8090/api/externals/energyhelpline/tariff', settings, function(s) {
-					if (s !== 'success') {
-						console.log("Error submitting " + tariffAndSupplier.tariff + " from " + tariffAndSupplier.supplier);
-					}
-				});
-			}
-			
+			service.open(params.tariffService, settings, function(s) {
+				if (s !== 'success') {
+					console.log("Unable to submit to " + params.tariffService + " please check that the service is running");
+				}
+			});
+
 			messages ++;
 		}
 	}
@@ -109,28 +113,36 @@ console.log("loading")
 				then.selectFuelMix, 
 				function() {
 
-					// Select whether the the energy is received from the same supplier
 					wait.until(
+						// select E7 where appropriate
 						testThat.theSpinnerHasStopped, 
-						then.selectSameSupplier, 
-						function () {
+						then.selectE7, 
+						function() {
 
-							// Select the first supplier and tariff
+							// Select whether the the energy is received from the same supplier
 							wait.until(
 								testThat.theSpinnerHasStopped, 
-								then.selectFirstSupplierAndTariff, 
-								function() {
+								then.selectSameSupplier, 
+								function () {
 
-									// Next enter the consumption. Again wait for the spinner to stop
+									// Select the first supplier and tariff
 									wait.until(
-										testThat.theSpinnerHasStopped,  
-										then.selectEachSupplierTariff
+										testThat.theSpinnerHasStopped, 
+										then.selectFirstSupplierAndTariff, 
+										function() {
+
+											// Next enter the consumption. Again wait for the spinner to stop
+											wait.until(
+												testThat.theSpinnerHasStopped,  
+												then.selectEachSupplierTariff
+											);
+											
+										}
 									);
-									
 								}
-							)
+							);
 						}
-					)
+					);
 				}
 		    );
 		}
@@ -140,5 +152,4 @@ console.log("loading")
 	}
 };
 
-console.log("hello there")
 page.open("https://energyhelpline.com/fri/");
